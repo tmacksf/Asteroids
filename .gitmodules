@@ -1,0 +1,6 @@
+[submodule "src/external/raylib"]
+	path = src/external/raylib
+	url = https://github.com/raysan5/raylib.git
+[submodule "TSL"]
+	path = src/external/TSL
+	url = https://github.com/tmacksf/TSL.git
