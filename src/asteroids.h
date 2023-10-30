@@ -13,10 +13,14 @@
 
 #define SHIP_SIZE 30
 
-#define MAX_VELOCITY 20
+#define MAX_VELOCITY 5
 
 #define SHOT_TIME 300
 #define SHOT_SIZE 5
+
+// asteroid constants
+#define ASTEROID_MIN_VERTEX_COUNT 5
+#define ASTEROID_MAX_VERTEX_COUNT 20
 
 typedef struct Ship {
   Vec2 center;
@@ -26,7 +30,9 @@ typedef struct Ship {
 } Ship;
 
 typedef struct Asteroid {
+  U16 vertex_count;
   Vec2_I32 *vertices;
+  Vec2 center;
 } Asteroid;
 
 typedef struct Shot {
@@ -55,6 +61,7 @@ void shoot(const Ship *ship, Queue *q);
 void drawShots(Queue *q);
 
 // Asteroid stuff
+Asteroid *makeAsteroid();
 
 // makes a new asteroid with a random number of vertices (between 4 and 10)
 Asteroid *makeAsteroid();

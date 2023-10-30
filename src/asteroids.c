@@ -1,4 +1,5 @@
 #include "asteroids.h"
+#include "external/TSL/src/base.h"
 #include "external/TSL/src/datastructures/queue.h"
 #include "external/raylib/src/raylib.h"
 
@@ -91,9 +92,10 @@ void moveShip(Ship *ship, bool boosting) {
   }
 
   // accelerate here
+  const float acceleration = 0.1f;
   if (boosting) {
-    ship->velocity.x += 2.0f * cos(ship->direction);
-    ship->velocity.y += 2.0f * -sin(ship->direction);
+    ship->velocity.x += acceleration * cos(ship->direction);
+    ship->velocity.y -= acceleration * sin(ship->direction);
   }
 
   if (ship->velocity.x > MAX_VELOCITY)
@@ -124,10 +126,10 @@ void moveShip(Ship *ship, bool boosting) {
 void shoot(const Ship *ship, Queue *q) {
   Shot s = {.timeLeft = SHOT_TIME,
             .x = ship->center.x + cos(ship->direction) * SHIP_SIZE,
-            .y = ship->center.y + -sin(ship->direction) * SHIP_SIZE};
+            .y = ship->center.y + -sin(ship->direction) * SHIP_SIZE,
+            ship->direction};
 
-  // queue_push(q, &s);
-  printf("%d, %lu\n", q->datasize, sizeof(Shot));
+  queue_push(q, &s);
 }
 
 void drawShots(Queue *q) {
@@ -138,21 +140,46 @@ void drawShots(Queue *q) {
     queue_pop(q);
     node = queue_topNode(q);
   }
-
   int i = 0;
-  /*
   while (node) {
     Shot *s = node->data;
     DrawPixel(s->x, s->y, WHITE);
     // update position
-    s->x += 1;
-    s->y -= 1;
+    s->x += 10 * cos(s->direction);
+    s->y -= 10 * sin(s->direction);
+    if (s->x > WIDTH) {
+      s->x = 0;
+    }
+    if (s->x < 0) {
+      s->x = WIDTH;
+    }
+
+    if (s->y > HEIGHT) {
+      s->y = 0;
+    }
+    if (s->y < 0) {
+      s->y = HEIGHT;
+    }
 
     s->timeLeft--;
     node = node->next;
     i++;
   }
-  if (i != q->size)
-    printf("Error moment\n");
-  */
+}
+
+Asteroid *makeAsteroid() {
+  Asteroid *a = malloc(sizeof(Asteroid));
+  a->vertex_count = rand() % 20;
+  a->vertices = malloc(a->vertex_count * sizeof(Vec2_I32));
+  float angle_slice_size = 2 * PI / a->vertex_count;
+  for (int i = 0; i < a->vertex_count; i++) {
+    // going to generate random polar coordinate for each point
+    float lower_angle = i * angle_slice_size;
+    int len = 5 + rand() % 15;
+    float angle = lower_angle + (float)rand() / (float)(RAND_MAX / lower_angle);
+  }
+  // determine location
+  a->center.x = 200;
+  a->center.y = 200;
+  return a;
 }
