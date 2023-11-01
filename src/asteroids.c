@@ -1,5 +1,6 @@
 #include "asteroids.h"
 #include "external/TSL/src/base.h"
+#include "external/TSL/src/datastructures/dlinkedlist.h"
 #include "external/TSL/src/datastructures/queue.h"
 #include "external/raylib/src/raylib.h"
 
@@ -12,7 +13,13 @@ int runGame() {
 
   Ship *ship = makeShip(center.x, center.y);
   Queue *shot_queue = queue_init(sizeof(Shot));
+  DLinkedList *asteroids = dlist_init(sizeof(Asteroid));
+  for (int i = 0; i < 5; i++) {
+    Asteroid a = makeAsteroid();
+    dlist_append(asteroids, &a);
+  }
 
+  printf("Game\n");
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(BLACK);
@@ -28,6 +35,7 @@ int runGame() {
     moveShip(ship, boosting);
     drawShip(ship, boosting);
     drawShots(shot_queue);
+    drawAsteroids(asteroids);
 
     EndDrawing();
   }
@@ -167,19 +175,79 @@ void drawShots(Queue *q) {
   }
 }
 
-Asteroid *makeAsteroid() {
-  Asteroid *a = malloc(sizeof(Asteroid));
-  a->vertex_count = rand() % 20;
-  a->vertices = malloc(a->vertex_count * sizeof(Vec2_I32));
-  float angle_slice_size = 2 * PI / a->vertex_count;
-  for (int i = 0; i < a->vertex_count; i++) {
-    // going to generate random polar coordinate for each point
-    float lower_angle = i * angle_slice_size;
-    int len = 5 + rand() % 15;
-    float angle = lower_angle + (float)rand() / (float)(RAND_MAX / lower_angle);
-  }
+Asteroid makeAsteroid() {
+  Asteroid a;
+  // a->vertex_count = 6 + rand() % 14;
+  a.vertex_count = 6;
+  a.vertices = malloc(a.vertex_count * sizeof(Vec2_I32));
+  float angle_slice_size = 2 * PI / a.vertex_count;
   // determine location
-  a->center.x = 200;
-  a->center.y = 200;
+  // will be done by splitting the
+  int location = rand() % 4;
+  switch (location) {
+  // left
+  case 1:
+    a.center.x = 0;
+    a.center.y = rand() % HEIGHT;
+    break;
+  // right
+  case 2:
+    a.center.x = WIDTH;
+    a.center.y = rand() % HEIGHT;
+    break;
+  // top
+  case 3:
+    a.center.x = rand() % WIDTH;
+    a.center.y = 0;
+    break;
+  // bottom
+  default:
+    a.center.x = rand() % WIDTH;
+    a.center.y = HEIGHT;
+    break;
+  }
+  a.velocity.x = rand() % 40 - 20;
+  a.velocity.y = rand() % 40 - 20;
+  for (int i = 0; i < a.vertex_count; i++) {
+    // going to generate random polar coordinate for each point
+    int len = 5 + rand() % 15;
+    float angle = angle_slice_size * i +
+                  (float)rand() / ((float)RAND_MAX / angle_slice_size);
+    // still need to get the x and y and put them into asteroid
+    a.vertices[i].x = (float)len * cos(angle);
+    a.vertices[i].y = (float)len * -sin(angle);
+  }
   return a;
+}
+
+void drawAsteroid(Asteroid *a) {
+  for (int i = 1; i < a->vertex_count; i++) {
+    DrawLine(a->center.x + a->vertices[i - 1].x,
+             a->center.y + a->vertices[i - 1].y, a->center.x + a->vertices[i].x,
+             a->center.y + a->vertices[i].y, WHITE);
+  }
+  DrawLine(a->center.x + a->vertices[0].x, a->center.y + a->vertices[0].y,
+           a->center.x + a->vertices[a->vertex_count - 1].x,
+           a->center.y + a->vertices[a->vertex_count - 1].y, WHITE);
+}
+
+void drawAsteroids(DLinkedList *asteroids) {
+  if (!asteroids->size)
+    return;
+  DLLNode *node = asteroids->head;
+  while (node) {
+    drawAsteroid(node->data);
+    Asteroid *temp = node->data;
+    temp->center.x += temp->velocity.x;
+    temp->center.y += temp->velocity.y;
+    if (temp->center.x > WIDTH)
+      temp->center.x = 0;
+    if (temp->center.x < 0)
+      temp->center.x = WIDTH;
+    if (temp->center.y > HEIGHT)
+      temp->center.y = 0;
+    if (temp->center.y < 0)
+      temp->center.y = HEIGHT;
+    node = node->next;
+  }
 }

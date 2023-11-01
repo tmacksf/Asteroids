@@ -2,6 +2,7 @@
 #define ASTEROIDS_H
 
 #include "external/TSL/src/base.h"
+#include "external/TSL/src/datastructures/dlinkedlist.h"
 #include "external/TSL/src/datastructures/queue.h"
 #include "external/raylib/src/raylib.h"
 #include <math.h>
@@ -31,8 +32,9 @@ typedef struct Ship {
 
 typedef struct Asteroid {
   U16 vertex_count;
-  Vec2_I32 *vertices;
+  Vec2 *vertices;
   Vec2 center;
+  Vec2 velocity;
 } Asteroid;
 
 typedef struct Shot {
@@ -60,10 +62,12 @@ void shoot(const Ship *ship, Queue *q);
 // draw shots
 void drawShots(Queue *q);
 
-// Asteroid stuff
-Asteroid *makeAsteroid();
-
 // makes a new asteroid with a random number of vertices (between 4 and 10)
-Asteroid *makeAsteroid();
+Asteroid makeAsteroid();
+// draws and individual asteroid
+void drawAsteroid(Asteroid *a);
+
+// updates and draws asteroids
+void drawAsteroids(DLinkedList *asteroids);
 
 #endif
