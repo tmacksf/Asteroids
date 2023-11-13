@@ -6,11 +6,12 @@
 #include "external/TSL/src/datastructures/queue.h"
 #include "external/raylib/src/raylib.h"
 #include <math.h>
-#include <stdio.h>
 #include <string.h>
 
 #define WIDTH 1200
 #define HEIGHT 800
+
+#define DEBUG 1
 
 #define SHIP_SIZE 30
 
@@ -42,6 +43,7 @@ typedef struct Shot {
   float x;
   float y;
   double direction; // radians
+  char active;
 } Shot;
 
 // Game stuff
@@ -56,18 +58,41 @@ Ship *makeShip(int x, int y);
 // drawship
 void drawShip(Ship *ship, bool boosting);
 // ship movement
-void moveShip(Ship *ship, bool boosting);
+void updateShip(Ship *ship, bool boosting);
 // shoot
 void shoot(const Ship *ship, Queue *q);
 // draw shots
 void drawShots(Queue *q);
+// updates the position of the shots
+void updateShots(Queue *q);
 
 // makes a new asteroid with a random number of vertices (between 4 and 10)
 Asteroid makeAsteroid();
 // draws and individual asteroid
 void drawAsteroid(Asteroid *a);
 
-// updates and draws asteroids
+// draws asteroids
 void drawAsteroids(DLinkedList *asteroids);
+// updates asteroids
+void updateAsteroids(DLinkedList *asteroids);
+
+// collisions
+int handleCollisions(const Ship *ship, DLinkedList *asteroids, Queue *shots);
+
+int lineIntersection(float p0_x, float p0_y, float p1_x, float p1_y, float p2_x,
+                     float p2_y, float p3_x, float p3_y);
+
+int shotIntersection(const Asteroid *a, const Shot *s);
+
+#if DEBUG
+// TODO: Add a way to store debug info: Asteroid count, shot count, number of
+// intersections, if ship is intersecting asteroid, etc
+
+// make a custom asteroid
+Asteroid customAsteroid(int vcount, int x, int y);
+
+Shot customShot(bool intersecting);
+
+#endif
 
 #endif
