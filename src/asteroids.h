@@ -17,7 +17,7 @@
 
 #define MAX_VELOCITY 5
 
-#define SHOT_TIME 300
+#define SHOT_TIME 100
 #define SHOT_SIZE 5
 
 // asteroid constants
@@ -26,9 +26,10 @@
 
 typedef struct Ship {
   Vec2 center;
-  int dist;
   double direction; // in radians
   Vec2 velocity;
+  U16 vertex_count;
+  Vec2 *vertices;
 } Ship;
 
 typedef struct Asteroid {
@@ -77,12 +78,16 @@ void drawAsteroids(DLinkedList *asteroids);
 void updateAsteroids(DLinkedList *asteroids);
 
 // collisions
-int handleCollisions(const Ship *ship, DLinkedList *asteroids, Queue *shots);
+int shotAsteroidsCollisions(DLinkedList *asteroids, Queue *shots);
+
+int shipAsteroidCollision(DLinkedList *asteroids, Ship *ship);
 
 int lineIntersection(float p0_x, float p0_y, float p1_x, float p1_y, float p2_x,
                      float p2_y, float p3_x, float p3_y);
 
 int shotIntersection(const Asteroid *a, const Shot *s);
+
+int shipIntersection(const Asteroid *a, const Ship *s);
 
 #if DEBUG
 // TODO: Add a way to store debug info: Asteroid count, shot count, number of

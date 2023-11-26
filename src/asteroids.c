@@ -1,6 +1,8 @@
 #include "asteroids.h"
 #include "external/TSL/src/datastructures/dlinkedlist.h"
 #include "external/TSL/src/datastructures/queue.h"
+#include "external/raylib/src/raylib.h"
+#include <stdio.h>
 
 int runGame() {
   SetTargetFPS(60);
@@ -17,9 +19,6 @@ int runGame() {
     Asteroid a = makeAsteroid();
     dlist_append(asteroids, &a);
   }
-  DLLNode *n = asteroids->head;
-  n = n->next;
-  dlist_removeNodeAt(asteroids, 1);
 
   // time until new asteroid is spawned
   int spawn_countdown = 1000;
@@ -46,14 +45,16 @@ int runGame() {
       shoot(ship, shot_queue);
 
     if (debug) {
-      // check the collisions here
+      // output debug info
     }
 
     if (!paused) {
       updateShip(ship, boosting);
       updateAsteroids(asteroids);
-      handleCollisions(ship, asteroids, shot_queue);
+      shotAsteroidsCollisions(asteroids, shot_queue);
       updateShots(shot_queue);
+      if (shipAsteroidCollision(asteroids, ship))
+        paused = 1 - paused;
     }
 
     EndDrawing();
@@ -70,8 +71,16 @@ Ship *makeShip(const int x, const int y) {
   // center
   ship->center.x = x;
   ship->center.y = y;
+  ship->vertex_count = 3;
+  ship->vertices = malloc(sizeof(Vec2) * ship->vertex_count);
+  // vertices
+  ship->vertices[0].x = cos(ship->direction) * SHIP_SIZE;
+  ship->vertices[0].y = -sin(ship->direction) * SHIP_SIZE;
+  ship->vertices[1].x = cos(ship->direction + 2.0f * PI / 3) * SHIP_SIZE;
+  ship->vertices[1].y = -sin(ship->direction + 2.0f * PI / 3) * SHIP_SIZE;
+  ship->vertices[2].x = cos(ship->direction - 2.0f * PI / 3) * SHIP_SIZE;
+  ship->vertices[2].y = -sin(ship->direction - 2.0f * PI / 3) * SHIP_SIZE;
 
-  ship->dist = 10;
   ship->direction = PI / 2.0f;
 
   return ship;
@@ -81,19 +90,28 @@ void drawShip(Ship *ship, bool boosting) {
   // could probably load this into a texture but for now this is fine
   // have to draw 3 lines
 
-  // need to flip y axis so make it negative
+  // need to flip y axis to make it intuitiva
   Vec2 top = {cos(ship->direction) * SHIP_SIZE,
               -sin(ship->direction) * SHIP_SIZE};
   Vec2 left = {cos(ship->direction + 2.0f * PI / 3) * SHIP_SIZE,
                -sin(ship->direction + 2.0f * PI / 3) * SHIP_SIZE};
   Vec2 right = {cos(ship->direction - 2.0f * PI / 3) * SHIP_SIZE,
                 -sin(ship->direction - 2.0f * PI / 3) * SHIP_SIZE};
-  DrawLine(ship->center.x + top.x, ship->center.y + top.y,
-           ship->center.x + left.x, ship->center.y + left.y, RED);
-  DrawLine(ship->center.x + top.x, ship->center.y + top.y,
-           ship->center.x + right.x, ship->center.y + right.y, BLUE);
-  DrawLine(ship->center.x + left.x, ship->center.y + left.y,
-           ship->center.x + right.x, ship->center.y + right.y, WHITE);
+
+  // update values in ship
+  ship->vertices[0].x = ship->center.x + top.x;
+  ship->vertices[0].y = ship->center.y + top.y;
+  ship->vertices[1].x = ship->center.x + left.x;
+  ship->vertices[1].y = ship->center.y + left.y;
+  ship->vertices[2].x = ship->center.x + right.x;
+  ship->vertices[2].y = ship->center.y + right.y;
+
+  DrawLine(ship->vertices[0].x, ship->vertices[0].y, ship->vertices[1].x,
+           ship->vertices[1].y, RED);
+  DrawLine(ship->vertices[0].x, ship->vertices[0].y, ship->vertices[2].x,
+           ship->vertices[2].y, BLUE);
+  DrawLine(ship->vertices[1].x, ship->vertices[1].y, ship->vertices[2].x,
+           ship->vertices[2].y, WHITE);
 
   if (boosting)
     DrawLine(ship->center.x, ship->center.y,
@@ -103,7 +121,7 @@ void drawShip(Ship *ship, bool boosting) {
   Vector2 c = {.x = (float)ship->center.x, .y = (float)ship->center.y};
   DrawPixelV(c, WHITE);
 
-  // and an additional two for the tail thingy
+  // TODO: an additional two for the tail thingy
 }
 
 void updateShip(Ship *ship, bool boosting) {
@@ -125,6 +143,7 @@ void updateShip(Ship *ship, bool boosting) {
     ship->velocity.y -= acceleration * sin(ship->direction);
   }
 
+  // keep velocity below max
   if (ship->velocity.x > MAX_VELOCITY)
     ship->velocity.x = MAX_VELOCITY;
   if (ship->velocity.y > MAX_VELOCITY)
@@ -336,82 +355,123 @@ int lineIntersection(float p0_x, float p0_y, float p1_x, float p1_y, float p2_x,
 }
 
 // returns 0 if there is no intersection and 1 if intersection
-static int shipIntersection(const Ship *ship, const Asteroid *a) {
-  // sweep line algorithm
-  return 0;
-}
 
-int shotIntersection(const Asteroid *a, const Shot *s) {
-  // going to do a ray cast and see how many times a shot intersects the
-  // asteroid. If 1 then inside else outside
-
-  // line segment for the ray cast
-  int intersectionCount = 0;
+int shipIntersection(const Asteroid *a, const Ship *s) {
+  // brute force find all intersections
   const int vc = a->vertex_count;
-  float sx = s->x;
-  float sy = (float)HEIGHT;
-  // center of the asteroid for the offset
+  // discard asteroids that are jtoo far
+  float dist = sqrt(pow(a->center.x + s->center.x, 2.0f) +
+                    pow(a->center.y + s->center.y, 2.0f));
+  if (dist > 60.0f)
+    return 0;
+
+  printf("Dist %f", dist);
   float cx = a->center.x;
   float cy = a->center.y;
-  for (int i = 1; i < a->vertex_count; i++) {
-    // check shot line segment against single asteroid line segment
+  // if they are too far to interact
+
+  for (int i = 0; i < vc; i++) {
+    // TODO: Remove 3 and replace with variable in the ship
     float ax_1 = a->vertices[i - 1].x + cx;
     float ay_1 = a->vertices[i - 1].y + cy;
     float ax_2 = a->vertices[i].x + cx;
     float ay_2 = a->vertices[i].y + cy;
-    if (lineIntersection(s->x, s->y, sx, sy, ax_1, ay_1, ax_2, ay_2))
-      intersectionCount++;
+    for (int j = 1; j < 3; j++) {
+      if (lineIntersection(s->vertices[i - 1].x, s->vertices[i - 1].y,
+                           s->vertices[i].x, s->vertices[i].y, ax_1, ay_1, ax_2,
+                           ay_2))
+        return 1;
+    }
+    // check first to last
+    if (lineIntersection(s->vertices[0].x, s->vertices[0].y,
+                         s->vertices[s->vertex_count - 1].x,
+                         s->vertices[s->vertex_count - 1].y, ax_1, ay_1, ax_2,
+                         ay_2))
+      return 1;
   }
-  // have to check the first and last for final line segment that closes it
-  if (lineIntersection(s->x, s->y, sx, sy, a->vertices[0].x + cx,
-                       a->vertices[0].y + cy, a->vertices[vc - 1].x + cx,
-                       a->vertices[vc - 1].y + cy))
-    intersectionCount++;
+  return 0;
+}
 
-  return intersectionCount % 2 == 0 ? 0 : 1;
+int shotIntersection(const Asteroid *a, const Shot *s) {
+  // keeping track of intersections of both line segements to make sure its
+  // inside
+  int intersectionCountBelow = 0;
+  int intersectionCountAbove = 0;
+  const int vc = a->vertex_count;
+  // line segments for the ray cast
+  float xRay = s->x;
+  float yRayBelow = (float)HEIGHT;
+  float yRayAbove = 0.0f;
+  // center of the asteroid for the offset
+  float cx = a->center.x;
+  float cy = a->center.y;
+  for (int i = 1; i < a->vertex_count; i++) {
+    // check shot line segment against single asteroid line
+    // segment
+    float ax_1 = a->vertices[i - 1].x + cx;
+    float ay_1 = a->vertices[i - 1].y + cy;
+    float ax_2 = a->vertices[i].x + cx;
+    float ay_2 = a->vertices[i].y + cy;
+
+    intersectionCountBelow +=
+        lineIntersection(s->x, s->y, xRay, yRayBelow, ax_1, ay_1, ax_2, ay_2);
+    intersectionCountAbove +=
+        lineIntersection(s->x, s->y, xRay, yRayAbove, ax_1, ay_1, ax_2, ay_2);
+  }
+  // have to check the first and last for final line segment of asteroid
+  intersectionCountBelow += lineIntersection(
+      s->x, s->y, xRay, yRayBelow, a->vertices[0].x + cx, a->vertices[0].y + cy,
+      a->vertices[vc - 1].x + cx, a->vertices[vc - 1].y + cy);
+  intersectionCountAbove += lineIntersection(
+      s->x, s->y, xRay, yRayAbove, a->vertices[0].x + cx, a->vertices[0].y + cy,
+      a->vertices[vc - 1].x + cx, a->vertices[vc - 1].y + cy);
+
+  return (intersectionCountAbove == 1 && intersectionCountBelow == 1) ? 1 : 0;
 }
 
 // TODO: Optimise the search away from brute force
-int handleCollisions(const Ship *ship, DLinkedList *asteroids, Queue *shots) {
-  // loop through asteroids. for each loop through all shots to see if any
-  // intersect
-  DLLNode *asteroid = asteroids->head;
+int shotAsteroidsCollisions(DLinkedList *asteroids, Queue *shots) {
+  // loop through asteroids. for each loop through all shots
+  // to see if any intersect
+  DLLNode *node = asteroids->head;
   for (int i = 0; i < asteroids->size; i++) {
-    Asteroid *a = asteroid->data;
+    Asteroid *a = node->data;
     QueueNode *shot = shots->front;
     for (int j = 0; j < shots->size; j++) {
-
-#if DEBUG
-      if (!shot) {
-        printf("QUEUE WRONG LENGTH\n Queue size: %d\n", shots->size);
-        exit(1);
-      }
-      if (!asteroid) {
-        printf("DLL WRONG LENGTH\n DLL size: %d\n", asteroids->size);
-        exit(1);
-      }
-#endif
-
       Shot *s = shot->data;
-      if (!s->active)
+      if (!s->active) {
+        shot = shot->next;
         continue;
+      }
 
       if (shotIntersection(a, s)) {
         // destroy asteroid
-        dlist_removeNode(asteroids, asteroid);
         s->active = 0;
         DrawLine(s->x, s->y, s->x, HEIGHT, RED);
-        break;
+        printf("Asteroid center: %f, %f, Shot Center: %f, %f\n", a->center.x,
+               a->center.y, s->x, s->y);
+        dlist_removeNode(asteroids, node);
+        return 0; // TODO: Fix this so that we can remove more
+                  // than 1 asteroid per frame
       } else {
         DrawLine(s->x, s->y, s->x, HEIGHT, BLUE);
       }
       shot = shot->next;
     }
-    asteroid = asteroid->next;
+    node = node->next;
   }
+  return 0;
+}
 
-  // ship: if it has collided then return 1. No collision return 0
+int shipAsteroidCollision(DLinkedList *asteroids, Ship *ship) {
+  DLLNode *node = asteroids->head;
   for (int i = 0; i < asteroids->size; i++) {
+    Asteroid *a = node->data;
+    if (shipIntersection(a, ship)) {
+      printf("Collision\n");
+      return 1;
+    }
+    node = node->next;
   }
   return 0;
 }
@@ -426,11 +486,13 @@ Asteroid customAsteroid(int vcount, int x, int y) {
   a.vertices = malloc(sizeof(Vec2) * vcount);
   float angle_slice_size = 2 * PI / a.vertex_count;
   for (int i = 0; i < a.vertex_count; i++) {
-    // going to generate random polar coordinate for each point
+    // going to generate random polar coordinate for each
+    // point
     int len = 10 + rand() % 20;
     float angle = angle_slice_size * i +
                   (float)rand() / ((float)RAND_MAX / angle_slice_size);
-    // still need to get the x and y and put them into asteroid
+    // still need to get the x and y and put them into
+    // asteroid
     a.vertices[i].x = (float)len * cos(angle);
     a.vertices[i].y = (float)len * -sin(angle);
     printf("x: %f, y: %f\n", a.vertices[i].x, a.vertices[i].y);
